@@ -68,6 +68,34 @@ test('UnlockAchievement is correct', () => {
   expect(BranchEvent.UnlockAchievement).toBe(RNBranch.STANDARD_EVENT_UNLOCK_ACHIEVEMENT)
 })
 
+test('ViewAd is correct', () => {
+  expect(BranchEvent.ViewAd).toBe(RNBranch.STANDARD_EVENT_VIEW_AD)
+})
+
+test('ClickAd is correct', () => {
+  expect(BranchEvent.ClickAd).toBe(RNBranch.STANDARD_EVENT_CLICK_AD)
+})
+
+test('Invite is correct', () => {
+  expect(BranchEvent.Invite).toBe(RNBranch.STANDARD_EVENT_INVITE)
+})
+
+test('Login is correct', () => {
+  expect(BranchEvent.Login).toBe(RNBranch.STANDARD_EVENT_LOGIN)
+})
+
+test('Reserve is correct', () => {
+  expect(BranchEvent.Reserve).toBe(RNBranch.STANDARD_EVENT_RESERVE)
+})
+
+test('Subscribe is correct', () => {
+  expect(BranchEvent.Subscribe).toBe(RNBranch.STANDARD_EVENT_SUBSCRIBE)
+})
+
+test('StartTrial is correct', () => {
+  expect(BranchEvent.StartTrial).toBe(RNBranch.STANDARD_EVENT_START_TRIAL)
+})
+
 // --- Field mapping
 
 test('Name mapping is correct', () => {
@@ -188,6 +216,15 @@ test('customData is correct', () => {
   const event = new BranchEvent(BranchEvent.ViewItem, null, { customData: { key: 'value' } })
   expect(typeof(event.customData)).toBe('object')
   expect(event.customData.key).toBe('value')
+})
+
+test('alias is null by default', () => {
+  expect(new BranchEvent(BranchEvent.ViewItem).alias).toBe(null)
+})
+
+test('alias is correct', () => {
+  const event = new BranchEvent(BranchEvent.ViewItem, null, { alias: 'My Alias' })
+  expect(event.alias).toBe('My Alias')
 })
 
 // --- _identFromMessage

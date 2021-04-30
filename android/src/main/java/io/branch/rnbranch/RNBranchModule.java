@@ -30,6 +30,8 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+import javax.annotation.Nonnull;
+
 public class RNBranchModule extends ReactContextBaseJavaModule {
     public static final String REACT_CLASS = "RNBranch";
     public static final String REACT_MODULE_NAME = "RNBranch";
@@ -55,6 +57,8 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     private static final String STANDARD_EVENT_ADD_PAYMENT_INFO = "STANDARD_EVENT_ADD_PAYMENT_INFO";
     private static final String STANDARD_EVENT_PURCHASE = "STANDARD_EVENT_PURCHASE";
     private static final String STANDARD_EVENT_SPEND_CREDITS = "STANDARD_EVENT_SPEND_CREDITS";
+    private static final String STANDARD_EVENT_VIEW_AD = "STANDARD_EVENT_VIEW_AD";
+    private static final String STANDARD_EVENT_CLICK_AD = "STANDARD_EVENT_CLICK_AD";
 
     private static final String STANDARD_EVENT_SEARCH = "STANDARD_EVENT_SEARCH";
     private static final String STANDARD_EVENT_VIEW_ITEM = "STANDARD_EVENT_VIEW_ITEM";
@@ -66,6 +70,11 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     private static final String STANDARD_EVENT_COMPLETE_TUTORIAL = "STANDARD_EVENT_COMPLETE_TUTORIAL";
     private static final String STANDARD_EVENT_ACHIEVE_LEVEL = "STANDARD_EVENT_ACHIEVE_LEVEL";
     private static final String STANDARD_EVENT_UNLOCK_ACHIEVEMENT = "STANDARD_EVENT_UNLOCK_ACHIEVEMENT";
+    private static final String STANDARD_EVENT_INVITE = "STANDARD_EVENT_INVITE";
+    private static final String STANDARD_EVENT_LOGIN = "STANDARD_EVENT_LOGIN";
+    private static final String STANDARD_EVENT_RESERVE = "STANDARD_EVENT_RESERVE";
+    private static final String STANDARD_EVENT_SUBSCRIBE = "STANDARD_EVENT_SUBSCRIBE";
+    private static final String STANDARD_EVENT_START_TRIAL = "STANDARD_EVENT_START_TRIAL";
 
     private static final String IDENT_FIELD_NAME = "ident";
     public static final String UNIVERSAL_OBJECT_NOT_FOUND_ERROR_CODE = "RNBranch::Error::BUONotFound";
@@ -79,8 +88,8 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     private static Branch.BranchUniversalReferralInitListener initListener = null;
 
     private static Activity mActivity = null;
-    private static boolean mUseDebug = false;
     private static boolean mInitialized = false;
+    private static volatile boolean mNewIntent = true;
     private static JSONObject mRequestMetadata = new JSONObject();
 
     private AgingHash<String, BranchUniversalObject> mUniversalObjectMap = new AgingHash<>(AGING_HASH_TTL);
@@ -88,26 +97,8 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     private static Branch.BranchReferralInitListener referralInitListener = null;
 
     public static void getAutoInstance(Context context) {
-        RNBranchConfig config = new RNBranchConfig(context);
-        String branchKey = config.getBranchKey();
-        String liveKey = config.getLiveKey();
-        String testKey = config.getTestKey();
-        boolean useTest = config.getUseTestInstance();
-
         Branch.registerPlugin(PLUGIN_NAME, io.branch.rnbranch.BuildConfig.RNBRANCH_VERSION);
-
-        if (branchKey != null) {
-            Branch.getAutoInstance(context, branchKey);
-        }
-        else if (useTest && testKey != null) {
-            Branch.getAutoInstance(context, testKey);
-        }
-        else if (!useTest && liveKey != null) {
-            Branch.getAutoInstance(context, liveKey);
-        }
-        else {
-            Branch.getAutoInstance(context);
-        }
+        Branch.getAutoInstance(context);
     }
 
     public static void reInitSession(Activity reactActivity) {
@@ -131,6 +122,7 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         Branch branch = setupBranch(reactActivity.getApplicationContext());
 
         mActivity = reactActivity;
+        final boolean isNewIntent = mNewIntent;
         referralInitListener = new Branch.BranchReferralInitListener(){
 
             private Activity mmActivity = null;
@@ -148,7 +140,7 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
                 try {
                     result.put(NATIVE_INIT_SESSION_FINISHED_EVENT_PARAMS, referringParams);
                     result.put(NATIVE_INIT_SESSION_FINISHED_EVENT_ERROR, error != null ? error.getMessage() : JSONObject.NULL);
-                    result.put(NATIVE_INIT_SESSION_FINISHED_EVENT_URI, uri != null ? uri.toString() : JSONObject.NULL);
+                    result.put(NATIVE_INIT_SESSION_FINISHED_EVENT_URI, isNewIntent && uri != null ? uri.toString() : JSONObject.NULL);
                 }
                 catch (JSONException e) {
 
@@ -188,7 +180,11 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
                     broadcastIntent.putExtra(NATIVE_INIT_SESSION_FINISHED_EVENT_LINK_PROPERTIES, linkProperties);
                 }
 
-                if (uri != null) {
+                /*
+                 * isNewIntent is a capture of the value of mNewIntent above, so does not change when
+                 * mNewIntent changes in onNewIntent.
+                 */
+                if (isNewIntent && uri != null) {
                     broadcastIntent.putExtra(NATIVE_INIT_SESSION_FINISHED_EVENT_URI, uri.toString());
                 }
 
@@ -205,12 +201,34 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     }
 
     /**
+     * Call from Activity.onNewIntent:
+     *   @Override
+     *   public void onNewIntent(Intent intent) {
+     *     super.onNewIntent(intent);
+     *     RNBranchModule.onNewIntent(intent);
+     *   }
+     * @param intent the new Intent received via Activity.onNewIntent
+     */
+    public static void onNewIntent(@Nonnull Intent intent) {
+        mActivity.setIntent(intent);
+        mNewIntent = true;
+        reInitSession(mActivity);
+    }
+
+    /**
      * Notify JavaScript of init session start. This generates an RNBranch.initSessionStart
      * event to JS via the RN native event emitter.
      * @param context a Context for the LocalBroadcastManager
      * @param uri the URI to include in the notification or null
      */
     private static void notifyJSOfInitSessionStart(Context context, Uri uri) {
+        /*
+         * This check just ensures that we only generate one RNBranch.initSessionStart
+         * event per call to onNewIntent().
+         */
+        if (!mNewIntent) return;
+        mNewIntent = false;
+
         Intent broadcastIntent = new Intent(NATIVE_INIT_SESSION_STARTED_EVENT);
         if (uri != null) {
             broadcastIntent.putExtra(NATIVE_INIT_SESSION_STARTED_EVENT_URI, uri);
@@ -220,8 +238,15 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         Log.d(REACT_CLASS, "Sent session start broadcast for " + uri);
     }
 
-    public static void setDebug() {
-        mUseDebug = true;
+    /**
+     * @deprecated setDebug is deprecated and all functionality has been disabled. If you wish to enable
+     * logging, please invoke enableLogging. If you wish to simulate installs, please Test Devices
+     * (https://help.branch.io/using-branch/docs/adding-test-devices)
+     */
+    public static void setDebug() { }
+
+    public static void enableLogging() {
+        Branch.enableLogging();
     }
 
     public static void setRequestMetadata(String key, String val) {
@@ -266,6 +291,8 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         constants.put(STANDARD_EVENT_ADD_PAYMENT_INFO, BRANCH_STANDARD_EVENT.ADD_PAYMENT_INFO.getName());
         constants.put(STANDARD_EVENT_PURCHASE, BRANCH_STANDARD_EVENT.PURCHASE.getName());
         constants.put(STANDARD_EVENT_SPEND_CREDITS, BRANCH_STANDARD_EVENT.SPEND_CREDITS.getName());
+        constants.put(STANDARD_EVENT_VIEW_AD, BRANCH_STANDARD_EVENT.VIEW_AD.getName());
+        constants.put(STANDARD_EVENT_CLICK_AD, BRANCH_STANDARD_EVENT.CLICK_AD.getName());
 
         // Content Events
 
@@ -281,6 +308,11 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         constants.put(STANDARD_EVENT_COMPLETE_TUTORIAL , BRANCH_STANDARD_EVENT.COMPLETE_TUTORIAL.getName());
         constants.put(STANDARD_EVENT_ACHIEVE_LEVEL, BRANCH_STANDARD_EVENT.ACHIEVE_LEVEL.getName());
         constants.put(STANDARD_EVENT_UNLOCK_ACHIEVEMENT, BRANCH_STANDARD_EVENT.UNLOCK_ACHIEVEMENT.getName());
+        constants.put(STANDARD_EVENT_INVITE, BRANCH_STANDARD_EVENT.INVITE.getName());
+        constants.put(STANDARD_EVENT_LOGIN , BRANCH_STANDARD_EVENT.LOGIN.getName());
+        constants.put(STANDARD_EVENT_RESERVE, BRANCH_STANDARD_EVENT.RESERVE.getName());
+        constants.put(STANDARD_EVENT_SUBSCRIBE, BRANCH_STANDARD_EVENT.SUBSCRIBE.getName());
+        constants.put(STANDARD_EVENT_START_TRIAL, BRANCH_STANDARD_EVENT.START_TRIAL.getName());
 
         return constants;
     }
@@ -389,6 +421,21 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void lastAttributedTouchData(int window, final Promise promise) {
+        Branch branch = Branch.getInstance();
+        branch.getLastAttributedTouchData(new ServerRequestGetLATD.BranchLastAttributedTouchDataListener() {
+                @Override
+                public void onDataFetched(JSONObject jsonObject, BranchError error) {
+                    if (error == null) {
+                        promise.resolve(convertJsonToMap(jsonObject));
+                    } else {
+                        promise.reject(GENERIC_ERROR, error.getMessage());
+                    }
+                }
+            }, window);
+    }
+
+    @ReactMethod
     public void setIdentity(String identity) {
         Branch branch = Branch.getInstance();
         branch.setIdentity(identity);
@@ -399,6 +446,18 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         // setRequestMetadata does not do what it appears to do.  Call directly to the native code.
         Branch branch = Branch.getInstance();
         branch.setRequestMetadata(key, value);
+    }
+
+    @ReactMethod
+    public void addFacebookPartnerParameter(String name, String value) {
+        Branch branch = Branch.getInstance();
+        branch.addFacebookPartnerParameterWithName(name, value);
+    }
+
+    @ReactMethod
+    public void clearPartnerParameters() {
+        Branch branch = Branch.getInstance();
+        branch.clearPartnerParameters();
     }
 
     @ReactMethod
@@ -598,11 +657,15 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
             return;
         }
 
+        /*
+         * Using Intent.ACTION_VIEW here will open a browser for non-Branch links unless the
+         * domain is registered in an intent-filter in the manifest. Instead specify the host
+         * Activity.
+         */
         Intent intent = new Intent(mActivity, mActivity.getClass());
-        intent.putExtra("branch", url);
+        intent.setData(Uri.parse(url));
         intent.putExtra("branch_force_new_session", true);
 
-        if (options.hasKey("newActivity") && options.getBoolean("newActivity")) mActivity.finish();
         mActivity.startActivity(intent);
     }
 
@@ -637,6 +700,7 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
         if (params.hasKey("affiliation")) event.setAffiliation(params.getString("affiliation"));
         if (params.hasKey("description")) event.setDescription(params.getString("description"));
         if (params.hasKey("searchQuery")) event.setSearchQuery(params.getString("searchQuery"));
+        if (params.hasKey("alias")) event.setCustomerEventAlias(params.getString("alias"));
 
         if (params.hasKey("customData")) {
             ReadableMap customData = params.getMap("customData");
@@ -683,12 +747,6 @@ public class RNBranchModule extends ReactContextBaseJavaModule {
 
         if (!mInitialized) {
             Log.i(REACT_CLASS, "Initializing Branch SDK v. " + BuildConfig.VERSION_NAME);
-
-            RNBranchConfig config = new RNBranchConfig(context);
-
-            if (mUseDebug || config.getDebugMode()) branch.setDebug();
-
-            if (config.getEnableFacebookLinkCheck()) branch.enableFacebookAppLinkCheck();
 
             if (mRequestMetadata != null) {
                 Iterator keys = mRequestMetadata.keys();

@@ -44,7 +44,7 @@ class Branch {
     const subscriber = new BranchSubscriber(options)
     subscriber.subscribe()
 
-    return subscriber.unsubscribe
+    return () => subscriber.unsubscribe()
   }
 
   skipCachedEvents() {
@@ -60,11 +60,17 @@ class Branch {
   setDebug = () => { throw 'setDebug() is not supported in the RN SDK. For other solutions, please see https://rnbranch.app.link/setDebug' }
   getLatestReferringParams = (synchronous = false) => RNBranch.getLatestReferringParams(synchronous)
   getFirstReferringParams = RNBranch.getFirstReferringParams
+  lastAttributedTouchData =  (attributionWindow = {}) => RNBranch.lastAttributedTouchData(attributionWindow)
   setIdentity = (identity) => RNBranch.setIdentity(identity)
   setRequestMetadata = (key, value) => {
     console.info('[Branch] setRequestMetadata has limitations when called from JS.  Some network calls are made prior to the JS layer being available, those calls will not have the metadata.')
     return RNBranch.setRequestMetadataKey(key, value)
   }
+  addFacebookPartnerParameter = (name, value) => {
+    console.info('[Branch] addFacebookPartnerParameter has limitations when called from JS.  Some network calls are made prior to the JS layer being available, those calls will not have the partner parameters.')
+    return RNBranch.addFacebookPartnerParameter(name, value)
+  }
+  clearPartnerParameter = RNBranch.clearPartnerParameter
   logout = RNBranch.logout
   userCompletedAction = (event, state = {}) => RNBranch.userCompletedAction(event, state)
   getShortUrl = RNBranch.getShortUrl
