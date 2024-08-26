@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "react": "16.8.6",
-    "react-native": "0.60.3",
+    "react-native": "0.75.2",
     "react-native-branch": "^4.2.1"
   },
   "devDependencies": {
